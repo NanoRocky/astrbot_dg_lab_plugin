@@ -1,0 +1,23 @@
+{
+    "game_api": {
+        "description": "郊狼API连接配置",
+        "type": "object",
+        "items": {
+            "base_url": {
+                "description": "郊狼API服务器的base URL",
+                "type": "string",
+                "hint": "例如: http://api.example.com"
+            },
+            "default_client_id": {
+                "description": "默认客户端ID (可以是特定ID或 'all')",
+                "type": "string",
+                "default": "all"
+            },
+            "verify_ssl": {
+                "description": "验证SSL证书",
+                "type": "bool",
+                "default": false
+            }
+        }
+    }
+}
