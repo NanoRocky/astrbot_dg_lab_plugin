@@ -16,7 +16,18 @@
             "verify_ssl": {
                 "description": "验证SSL证书",
                 "type": "bool",
-                "default": false
+                "default": true
+            }
+        }
+    },
+    "target_info": {
+        "description": "受控者信息（增强 AI 上下文）",
+        "type": "object",
+        "items": {
+            "user_id": {
+                "description": "受控者的标识（如QQ号、昵称），让 AI 明确郊狼设备佩戴在谁身上",
+                "type": "string",
+                "default": "未知"
             }
         }
     }
