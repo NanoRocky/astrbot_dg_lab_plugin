@@ -83,19 +83,57 @@ class MyPlugin(Star):
 
     @filter.llm_tool(name="dglab_get_game_info")
     async def dglab_get_game_info(self, event: AstrMessageEvent) -> str:
-        """获取郊狼游戏终端的整体信息。包含当前设定的基础和随机强度、波形列表、波形播放模式，以及客户端被限制的最大强度等。建议调整参数或开火前先查询。"""
+        """获取郊狼游戏终端的整体信息。包含当前设定的基础和随机强度、波形列表、波形播放模式，以及客户端被限制的最大强度等。建议调整参数或开火前先查询。
+
+        Returns:
+            JSON 字符串。包含以下完整字段：
+            - `status` (int): 请求状态码，1 表示成功，0 表示失败。
+            - `code` (str): 状态码信息，如 "OK"。
+            - `strengthConfig` (object): 强度设置信息：
+                - `strength` (number): 基础强度。
+                - `randomStrength` (number): 随机波动强度，实际强度范围：[strength, strength + randomStrength]。
+            - `gameConfig` (object): 游戏配置信息：
+                - `strengthChangeInterval` (array): 随机强度变化间隔的时间范围，如 [15, 30]，单位：秒。
+                - `enableBChannel` (boolean): 是否启用了 B 通道。
+                - `bChannelStrengthMultiplier` (number): B 通道的强度倍数（A 通道强度*倍数=B 通道强度）。
+                - `pulseId` (string 或 array): 当前使用的波形列表。
+                - `pulseMode` (string): 波形播放模式，支持 "single"（单个波形）, "sequence"（列表顺序播放）, "random"（随机播放）。
+                - `pulseChangeInterval` (number): 波形切换间隔，单位：秒。
+            - `clientStrength` (object): 客户端实际设备的强度状态：
+                - `strength` (number): 客户端当前正在运行的实际强度。
+                - `limit` (number): 客户端被限制的最大强度上限。**重要提示：对受控者的所有操作绝不可超过此数值，否则可能造成事故**。
+            - `currentPulseId` (string): 当前实际正在播放播放和输出的波形ID。
+        """
         res = await self._request("GET", "")
         return json.dumps(res, ensure_ascii=False)
 
     @filter.llm_tool(name="dglab_get_pulse_list")
     async def dglab_get_pulse_list(self, event: AstrMessageEvent) -> str:
-        """获取郊狼所有可用的波形列表及其ID。可以使用这些波形ID来设置当前波形或者进行一键开火。"""
+        """获取郊狼所有可用的波形列表及其ID。可以使用这些波形ID来设置当前波形或者进行一键开火。
+
+        Returns:
+            JSON 字符串。包含以下完整字段：
+            - `status` (int): 请求状态码，1 表示成功，0 表示失败。
+            - `code` (str): 状态码信息，如 "OK"。
+            - `pulseList` (array): 波形对象列表，数组中每个对象包含：
+                - `id` (string): 独一无二的波形ID（如 "d6f83af0"）。
+                - `name` (string): 具体的波形名称（如 "呼吸"、"跳跃" 等），可以通过分析该字段判断哪种波形更适合当下的情境。
+        """
         res = await self._request("GET", "/pulse_list")
         return json.dumps(res, ensure_ascii=False)
 
     @filter.llm_tool(name="dglab_get_strength")
     async def dglab_get_strength(self, event: AstrMessageEvent) -> str:
-        """获取当前的游戏强度配置，包括基础强度(strength)和随机强度(randomStrength)。"""
+        """获取当前的游戏强度配置，包括基础强度(strength)和随机强度(randomStrength)。
+
+        Returns:
+            JSON 字符串。包含以下完整字段：
+            - `status` (int): 请求状态码，1 表示成功，0 表示失败。
+            - `code` (str): 状态码信息，如 "OK"。
+            - `strengthConfig` (object): 强度设置信息：
+                - `strength` (number): 当前设置的基础强度数值。
+                - `randomStrength` (number): 当前设置的随机波动强度。实际运行时强度将在 [strength, strength + randomStrength] 之间动态波动。
+        """
         res = await self._request("GET", "/strength")
         return json.dumps(res, ensure_ascii=False)
 
@@ -119,6 +157,13 @@ class MyPlugin(Star):
             random_strength_add (number): 可选，增加的随机强度值。
             random_strength_sub (number): 可选，减少的随机强度值。
             random_strength_set (number): 可选，直接设置的随机强度值。
+
+        Returns:
+            JSON 字符串。包含以下完整字段：
+            - `status` (int): 请求状态码，1 表示成功，0 表示失败。
+            - `code` (str): 状态码信息，如 "OK"。
+            - `message` (str): 成功说明，例如 "成功设置了 1 个游戏的强度配置"。
+            - `successClientIds` (array): 成功应用该设置的客户端ID列表。
         """
         payload = {}
         if any(x is not None for x in [strength_add, strength_sub, strength_set]):
@@ -149,7 +194,14 @@ class MyPlugin(Star):
 
     @filter.llm_tool(name="dglab_get_pulse")
     async def dglab_get_pulse(self, event: AstrMessageEvent) -> str:
-        """获取当前已启用的波形ID。可能是单个(string)也可能是数组(array)。"""
+        """获取当前已启用的波形ID。可能是单个(string)也可能是数组(array)。
+
+        Returns:
+            JSON 字符串。包含以下完整字段：
+            - `status` (int): 请求状态码，1 表示成功，0 表示失败。
+            - `code` (str): 状态码信息，如 "OK"。
+            - `pulseId` (string 或 array): 当前生效的波形ID。可能是单个波形ID，也可能是包含多个波形ID名称的数组。
+        """
         res = await self._request("GET", "/pulse")
         return json.dumps(res, ensure_ascii=False)
 
@@ -158,7 +210,14 @@ class MyPlugin(Star):
         """设置当前郊狼使用的波形ID。
 
         Args:
-            pulse_id (string): 必需，需要设置的波形ID，如果有多个波形ID请使用英文逗号拼接。
+            pulse_id (string): 必需，需要设置的波形ID。可使用 `dglab_get_pulse_list` 获得的有效波形ID进行替换。如果有多个波形ID请使用英文逗号拼接。
+
+        Returns:
+            JSON 字符串。返回对象包含以下完整字段：
+            - `status` (int): 请求状态码，1 表示成功，0 表示失败。
+            - `code` (str): 状态码信息，如 "OK" 或 "ERR::INVALID_REQUEST"。
+            - `message` (str): 成功或失败说明，例如 "成功设置了 1 个游戏的波形ID"。
+            - `successClientIds` (array): 成功应用该设置的客户端ID列表，数组内为对应的客户端ID字符串。
         """
         payload = {}
         if "," in pulse_id:
@@ -181,10 +240,17 @@ class MyPlugin(Star):
         """使用郊狼进行一键开火电击，这是对受控者**偏重的惩罚方式**。请保证该开火强度不会超过游戏设置或客户端限制上限。
 
         Args:
-            strength (number): 必需，开火电击强度。建议开火前判断或通过 `dglab_get_game_info` 查询 `clientStrength.limit`，防止强度越界或对用户造成惊吓。
+            strength (number): 必需，开火电击强度。建议开火前判断或通过 `dglab_get_game_info` 查询 `clientStrength.limit`，防止强度越界或对用户造成惊吓。用户可能额外设置了一键开火的上限，它与强度上限独立。一键开火的上限暂时无法查询。
             time (number): 可选，电击时间，单位：毫秒。最高30000（30秒），不传默认为5000。
             override (boolean): 可选，多次一键开火时，是否重置时间 (true为重置, false为叠加)，不传默认为false。
             pulse_id (string): 可选，一键开火期望指定使用的专属波形ID。
+
+        Returns:
+            JSON 字符串。返回对象包含以下完整字段：
+            - `status` (int): 请求状态码，1 表示成功，0 表示失败。
+            - `code` (str): 状态码信息，如 "OK"。
+            - `message` (str): 成功或失败说明，例如 "成功向 1 个游戏发送了一键开火指令"。
+            - `successClientIds` (array): 成功应用开火指令的客户端ID列表。
         """
         payload: dict[str, Any] = {"strength": strength}
         if time is not None:
