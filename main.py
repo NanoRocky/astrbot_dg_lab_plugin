@@ -11,7 +11,9 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.message.components import At
 
 
-@register("astrbot_dg_lab_ultra_plugin", "RC-CHN & NanoRocky", "郊狼API控制插件", "3.1.0")
+@register(
+    "astrbot_dg_lab_ultra_plugin", "RC-CHN & NanoRocky", "郊狼API控制插件", "3.1.0"
+)
 class MyPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -285,6 +287,7 @@ class MyPlugin(Star):
                 - `pulseId` (string 或 array): 当前使用的波形列表。
                 - `pulseMode` (string): 波形播放模式，支持 "single"（单个波形）, "sequence"（列表顺序播放）, "random"（随机播放）。
                 - `pulseChangeInterval` (number): 波形切换间隔，单位：秒。
+                - `fireStrengthLimit` (number): 一键开火的强度限制。
             - `clientStrength` (object): 客户端实际设备的强度状态：
                 - `strength` (number): 客户端当前正在运行的实际强度（A 通道）。
                 - `limit` (number): 客户端被限制的最大强度上限。**重要提示：对受控者的所有操作绝不可超过此数值，否则可能造成事故**。
@@ -387,6 +390,41 @@ class MyPlugin(Star):
 
         if not payload:
             return "没有提供需要修改的参数配置。"
+
+        info = await self._request("GET", "")
+        if info.get("status") == 1:
+            client_strength = info.get("clientStrength") or {}
+            limit = client_strength.get("limit")
+            strength_config = info.get("strengthConfig") or {}
+
+            new_str = strength_config.get("strength", 0)
+            if strength_add is not None:
+                new_str += strength_add
+            elif strength_sub is not None:
+                new_str -= strength_sub
+            elif strength_set is not None:
+                new_str = strength_set
+            if new_str < 0:
+                new_str = 0
+
+            new_rnd = strength_config.get("randomStrength", 0)
+            if random_strength_add is not None:
+                new_rnd += random_strength_add
+            elif random_strength_sub is not None:
+                new_rnd -= random_strength_sub
+            elif random_strength_set is not None:
+                new_rnd = random_strength_set
+            if new_rnd < 0:
+                new_rnd = 0
+
+            if limit is not None and (new_str + new_rnd) > limit:
+                return json.dumps(
+                    {
+                        "status": 0,
+                        "error": f"哎呀，强度设定得太高啦！基础强度与随机强度之和({new_str} + {new_rnd} = {new_str + new_rnd})超过了受控者设置的安全上限({limit})。请调低一点点再试吧～",
+                    },
+                    ensure_ascii=False,
+                )
 
         res = await self._request("POST", "/strength", json=payload)
         return json.dumps(res, ensure_ascii=False)
@@ -509,7 +547,7 @@ class MyPlugin(Star):
         """使用郊狼进行一键开火电击，对该受控者进行一次短时间的强刺激电击，这是对受控者**偏重的惩罚方式**。请保证该开火强度不会超过游戏设置或客户端限制上限。
 
         Args:
-            strength (number): 必需，开火电击强度。建议开火前判断或通过 `dglab_get_game_info` 查询 `clientStrength.limit`，防止强度越界或对用户造成惊吓。用户可能额外设置了一键开火的上限，它与强度上限独立。一键开火的上限暂时无法查询。一键开火的强度是叠加在当前强度上的，例如当前强度是12，一键开火强度设置为20，则实际用户受到的强度为32，并在设定的开火时间结束后回到当前强度。
+            strength (number): 必需，开火电击强度。建议开火前判断或通过 `dglab_get_game_info` 查询 `gameConfig.fireStrengthLimit` 以及 `clientStrength.limit`，防止强度越界或对用户造成惊吓。一键开火的强度是叠加在当前强度上的，例如当前强度是12，一键开火强度设置为20，则实际用户受到的强度为32，并在设定的开火时间结束后回到当前强度。
             time (number): 可选，电击时间，单位：毫秒。最高30000（30秒），不传默认为5000。
             override (boolean): 可选，多次一键开火时，是否重置时间 (true为重置, false为叠加)，不传默认为false。
             pulse_id (string): 可选，一键开火期望指定使用的专属波形ID。
@@ -534,11 +572,26 @@ class MyPlugin(Star):
         if info.get("status") == 1:
             client_strength = info.get("clientStrength") or {}
             limit = client_strength.get("limit")
-            if limit is not None and strength > limit:
+            game_config = info.get("gameConfig") or {}
+            fire_limit = game_config.get("fireStrengthLimit")
+            strength_config = info.get("strengthConfig") or {}
+            curr_str = strength_config.get("strength", 0)
+            curr_rnd = strength_config.get("randomStrength", 0)
+
+            if fire_limit is not None and strength > fire_limit:
                 return json.dumps(
                     {
                         "status": 0,
-                        "error": f"开火强度({strength})超过了客户端上限({limit})",
+                        "error": f"开火强度({strength})超过了 TA 的一键开火限制({fire_limit})，太刺激了可不行噢，请调低一点点再试吧～",
+                    },
+                    ensure_ascii=False,
+                )
+
+            if limit is not None and (curr_str + curr_rnd + strength) > limit:
+                return json.dumps(
+                    {
+                        "status": 0,
+                        "error": f"基础+随机+开火强度的总和({curr_str}+{curr_rnd}+{strength}={curr_str + curr_rnd + strength})超过了客户端上限({limit})。太狠了会坏掉的，请降低开火强度后再试～",
                     },
                     ensure_ascii=False,
                 )
@@ -829,6 +882,30 @@ class MyPlugin(Star):
                     yield event.plain_result("别闹啦，强度数值必须是个有效整数哦！😠")
                     return
 
+                info = await self._request("GET", "")
+                if info.get("status") == 1:
+                    client_strength = info.get("clientStrength") or {}
+                    limit = client_strength.get("limit")
+                    strength_config = info.get("strengthConfig") or {}
+                    curr_str = strength_config.get("strength", 0)
+                    curr_rnd = strength_config.get("randomStrength", 0)
+
+                    new_str = curr_str
+                    if mode in ["增", "增加"]:
+                        new_str += val
+                    elif mode in ["减", "减少"]:
+                        new_str -= val
+                    elif mode in ["设为", "设置", "设定"]:
+                        new_str = val
+                    if new_str < 0:
+                        new_str = 0
+
+                    if limit is not None and (new_str + curr_rnd) > limit:
+                        yield event.plain_result(
+                            f"❌ 哎呀，强度设定得太高啦！这会超过 TA 的强度安全上限，被设备拦截了哦。请调低一点点再试吧～"
+                        )
+                        return
+
                 payload = {"strength": {}}
                 if mode in ["增", "增加"]:
                     payload["strength"]["add"] = val
@@ -864,6 +941,30 @@ class MyPlugin(Star):
                         "别闹啦，随机强度数值必须是个有效整数哦！😠"
                     )
                     return
+
+                info = await self._request("GET", "")
+                if info.get("status") == 1:
+                    client_strength = info.get("clientStrength") or {}
+                    limit = client_strength.get("limit")
+                    strength_config = info.get("strengthConfig") or {}
+                    curr_str = strength_config.get("strength", 0)
+                    curr_rnd = strength_config.get("randomStrength", 0)
+
+                    new_rnd = curr_rnd
+                    if mode in ["增", "增加"]:
+                        new_rnd += val
+                    elif mode in ["减", "减少"]:
+                        new_rnd -= val
+                    elif mode in ["设为", "设置", "设定"]:
+                        new_rnd = val
+                    if new_rnd < 0:
+                        new_rnd = 0
+
+                    if limit is not None and (curr_str + new_rnd) > limit:
+                        yield event.plain_result(
+                            f"❌ 哎呀，随机强度设定得太高啦！这会超过 TA 的强度安全上限，被设备拦截了哦。请调低一点点再试吧～"
+                        )
+                        return
 
                 payload = {"randomStrength": {}}
                 if mode in ["增", "增加"]:
@@ -994,9 +1095,21 @@ class MyPlugin(Star):
             if info.get("status") == 1:
                 client_strength = info.get("clientStrength") or {}
                 limit = client_strength.get("limit")
-                if limit is not None and strength > limit:
+                game_config = info.get("gameConfig") or {}
+                fire_limit = game_config.get("fireStrengthLimit")
+                strength_config = info.get("strengthConfig") or {}
+                curr_str = strength_config.get("strength", 0)
+                curr_rnd = strength_config.get("randomStrength", 0)
+
+                if fire_limit is not None and strength > fire_limit:
                     yield event.plain_result(
-                        f"❌ 警告：设定的开火强度（{strength}）超过了 TA 的安全限制上限（{limit}），停止执行！"
+                        f"❌ 哎呀，开火强度太高啦！这超过了 TA 自己设定的一键开火限制哦，调低一点点再试吧～"
+                    )
+                    return
+
+                if limit is not None and (curr_str + curr_rnd + strength) > limit:
+                    yield event.plain_result(
+                        f"❌ 开火操作被拦截了喵！这个强度再加上原本的强度波动会超过 TA 的绝对安全上限的，太狠了会坏掉的～"
                     )
                     return
 
