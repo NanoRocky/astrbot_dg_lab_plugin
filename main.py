@@ -55,6 +55,12 @@ class MyPlugin(Star):
         target_client_id = self.default_client_id
         if not target_client_id:
             return {"error": "客户端ID未指定且未配置默认值"}
+
+        import re
+
+        if not re.match(r"^[A-Za-z0-9_-]+$", target_client_id):
+            return {"error": "客户端ID格式不合法"}
+
         url = f"{self.base_url.rstrip('/')}/api/v2/game/{target_client_id}{path}"
         logger.debug(f"Calling API: {url} with {kwargs}")
 
@@ -72,7 +78,8 @@ class MyPlugin(Star):
             if getattr(self, "session", None) is None or getattr(
                 self.session, "closed", True
             ):
-                self.session = aiohttp.ClientSession(trust_env=True)
+                timeout = aiohttp.ClientTimeout(total=10)
+                self.session = aiohttp.ClientSession(trust_env=True, timeout=timeout)
 
             if self.session is None:
                 return {"error": "内部错误：无法初始化 HTTP Session。"}
@@ -115,6 +122,8 @@ class MyPlugin(Star):
                         }
 
                     return res_json
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     text = await response.text()
                     logger.error(f"非正常JSON响应: {text[:200]}")
@@ -122,6 +131,8 @@ class MyPlugin(Star):
                         "error": f"非正常JSON响应 (状态码 {response.status}): {text[:200]}",
                         "status_code": response.status,
                     }
+        except asyncio.CancelledError:
+            raise
         except aiohttp.ClientConnectorError as e:
             logger.error(f"连接错误: {e}")
             return {"error": f"连接到API服务器失败: {e}"}
@@ -150,7 +161,8 @@ class MyPlugin(Star):
         target_client_id = self.default_client_id
 
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.ws_connect(ws_url, ssl=self.verify_ssl) as ws:
                     await ws.send_json(
                         {
@@ -230,6 +242,8 @@ class MyPlugin(Star):
                             "status": 0,
                             "error": "修改游戏高级配置超时（服务器未响应）",
                         }
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.error(f"WS更新游戏配置出错: {e}")
             return {"status": 0, "error": f"通过WebSocket修改设置失败: {e}"}
@@ -338,6 +352,18 @@ class MyPlugin(Star):
             - `message` (str): 成功说明，例如 "成功设置了 1 个游戏的强度配置"。
             - `successClientIds` (array): 成功应用该设置的客户端ID列表。
         """
+        if sum(x is not None for x in [strength_add, strength_sub, strength_set]) > 1:
+            return "错误：由于参数冲突，不能同时指定多个操作喔。"
+
+        if (
+            sum(
+                x is not None
+                for x in [random_strength_add, random_strength_sub, random_strength_set]
+            )
+            > 1
+        ):
+            return "错误：由于参数冲突，不能同时指定多个操作喔。"
+
         payload = {}
         if any(x is not None for x in [strength_add, strength_sub, strength_set]):
             payload["strength"] = {}
@@ -456,7 +482,14 @@ class MyPlugin(Star):
             new_fields["enableBChannel"] = enable_b_channel
 
         if b_channel_multiplier is not None:
-            new_fields["bChannelStrengthMultiplier"] = int(max(1, b_channel_multiplier))
+            if (
+                not isinstance(b_channel_multiplier, int)
+                and not b_channel_multiplier.is_integer()
+            ):
+                return '{"error": "b_channel_multiplier 必须是整数"}'
+            if b_channel_multiplier < 1:
+                return '{"error": "b_channel_multiplier 必须大于或等于1"}'
+            new_fields["bChannelStrengthMultiplier"] = int(b_channel_multiplier)
 
         if not new_fields:
             return '{"error": "没有提供任何需要修改的配置参数"}'
@@ -488,6 +521,28 @@ class MyPlugin(Star):
             - `message` (str): 成功或失败说明，例如 "成功向 1 个游戏发送了一键开火指令"。
             - `successClientIds` (array): 成功应用开火指令的客户端ID列表。
         """
+        if strength < 0:
+            return json.dumps(
+                {"status": 0, "error": "强度不能为负数"}, ensure_ascii=False
+            )
+        if time is not None and time > 30000:
+            return json.dumps(
+                {"status": 0, "error": "开火时间不能超过30000毫秒"}, ensure_ascii=False
+            )
+
+        info = await self._request("GET", "")
+        if info.get("status") == 1:
+            client_strength = info.get("clientStrength") or {}
+            limit = client_strength.get("limit")
+            if limit is not None and strength > limit:
+                return json.dumps(
+                    {
+                        "status": 0,
+                        "error": f"开火强度({strength})超过了客户端上限({limit})",
+                    },
+                    ensure_ascii=False,
+                )
+
         payload: dict[str, Any] = {"strength": strength}
         if time is not None:
             payload["time"] = time
@@ -601,6 +656,14 @@ class MyPlugin(Star):
             )
             return
 
+        import re
+
+        if not re.match(r"^[A-Za-z0-9_-]+$", client_id):
+            yield event.plain_result(
+                "❌ 客户端ID格式错误，只能包含字母、数字、短横线和下划线！"
+            )
+            return
+
         self.default_client_id = client_id
         if "game_api" not in self.config:
             self.config["game_api"] = {}
@@ -647,7 +710,8 @@ class MyPlugin(Star):
 
         sender_id = str(event.get_sender_id())
         has_perm = (
-            sender_id == str(self.target_user_id)
+            self.allow_all_users
+            or sender_id == str(self.target_user_id)
             or event.is_admin()
             or sender_id in self.authorized_users
         )
@@ -916,6 +980,25 @@ class MyPlugin(Star):
             except ValueError:
                 yield event.plain_result("填写的强度或时间不对哦，必须是数字才行！👿")
                 return
+
+            if strength < 0:
+                yield event.plain_result("别闹啦，强度不能为负数喵！")
+                return
+            if time_ms > 30000:
+                yield event.plain_result(
+                    "惩罚时间太长会坏掉的，不能超过30000毫秒（30秒）哦！"
+                )
+                return
+
+            info = await self._request("GET", "")
+            if info.get("status") == 1:
+                client_strength = info.get("clientStrength") or {}
+                limit = client_strength.get("limit")
+                if limit is not None and strength > limit:
+                    yield event.plain_result(
+                        f"❌ 警告：设定的开火强度（{strength}）超过了 TA 的安全限制上限（{limit}），停止执行！"
+                    )
+                    return
 
             payload = {"strength": strength, "time": time_ms}
             res = await self._request("POST", "/action/fire", json=payload)
