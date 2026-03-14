@@ -73,7 +73,7 @@
     也可以随时在面板中通过 `authorized_settings` 与 `group_settings` 进行修改！
 
 4. **选择性指引**
-    在人格设定或其它方式，诱导 Bot 调用 `dglab_get_target_info` 函数。
+    在人格设定或其它方式，引导 Bot 调用 `dglab_get_target_info` 函数。
     例如 `你可以在 AstrBot 上使用 dglab_get_target_info 等函数来控制 ** 的郊狼。` ，这里写的不怎么好，自行设定喔！
 
 ---
