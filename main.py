@@ -265,7 +265,7 @@ class MyPlugin(Star):
         help_text += "- dglab_get_pulse_list: 查看完整电击波形列表。\n"
         help_text += "- dglab_get_pulse: 查看当前启用的电击波形。\n"
         help_text += "- dglab_set_pulse: 修改电击波形（可传入多波形ID以按模式混合）。\n"
-        help_text += "- dglab_set_game_config: 修改游戏高阶设置（随机强度波动时间、波形播放模式如顺序/随机、波形切换时间、B通道开启限制）。\n"
+        help_text += "- dglab_set_game_config: 修改游戏高阶设置（随机强度波动时间、波形播放模式如顺序/随机、波形切换时间、B通道开关(是否启用控制B通道)、B通道强度的倍率(必须是正整数)、开火专属波形等）。\n"
         help_text += "- dglab_action_fire: 对该受控者进行一次短时间的强刺激电击（需要给出强度，可附加时间），这是**偏重的惩罚方式**。\n"
         return help_text
 
@@ -404,8 +404,11 @@ class MyPlugin(Star):
                 new_str -= strength_sub
             elif strength_set is not None:
                 new_str = strength_set
-            if new_str < 0:
-                new_str = 0
+            if new_str <= 0:
+                return json.dumps(
+                    {"status": 0, "error": "哎呀，基础强度不可以小于等于 0 啦～"},
+                    ensure_ascii=False,
+                )
 
             new_rnd = strength_config.get("randomStrength", 0)
             if random_strength_add is not None:
@@ -414,8 +417,11 @@ class MyPlugin(Star):
                 new_rnd -= random_strength_sub
             elif random_strength_set is not None:
                 new_rnd = random_strength_set
-            if new_rnd < 0:
-                new_rnd = 0
+            if new_rnd <= 0:
+                return json.dumps(
+                    {"status": 0, "error": "哼，随机强度的波动怎么能小于等于 0 呢～"},
+                    ensure_ascii=False,
+                )
 
             if limit is not None and (new_str + new_rnd) > limit:
                 return json.dumps(
@@ -475,17 +481,19 @@ class MyPlugin(Star):
         pulse_mode: str | None = None,
         pulse_change_interval: int | None = None,
         enable_b_channel: bool | None = None,
-        b_channel_multiplier: float | None = None,
+        b_channel_multiplier: int | None = None,
+        fire_pulse_id: str | None = None,
     ) -> str:
-        """设置或修改郊狼的高级配置（除了基础强度与波形外的游戏配置），包括随机时间、波形播放顺序、波形切换时间、B通道等。
+        """设置或修改郊狼的高级配置（除了基础强度与波形外的游戏配置），包括随机时间、波形播放顺序、波形切换时间、B通道开关、B通道倍数、开火专属波形等。
 
         Args:
             strength_change_interval_min (number): 可选，随机强度变化间隔的最小秒数。
             strength_change_interval_max (number): 可选，随机强度变化间隔的最大秒数。此参数通常需与min一起提供。
             pulse_mode (string): 可选，波形播放模式，必须是 "single"（单个且不切换）、"sequence"（按给定列表顺序播放）、"random"（随机播放其中一个）之一。
             pulse_change_interval (number): 可选，波形自动切换的时间间隔（秒）。
-            enable_b_channel (boolean): 可选，是否启用控制B通道。
-            b_channel_multiplier (number): 可选，B通道强度的倍率。注意：必须是大于等于1的整数（如1, 2, 3）。
+            enable_b_channel (boolean): 可选，是否启用控制B通道（B通道开关）。
+            b_channel_multiplier (number): 可选，B通道强度的倍率（B通道倍数）。注意：必须是正整数（不能为0）。
+            fire_pulse_id (string): 可选，一键开火指定的专属波形ID。可为空字符串 "null" 或 "clear" 表示清空。
 
         Returns:
             JSON 字符串。如果无相关参数则提示，否则返回修改请求结果。
@@ -529,6 +537,12 @@ class MyPlugin(Star):
                 return '{"error": "b_channel_multiplier 必须大于或等于1"}'
             new_fields["bChannelStrengthMultiplier"] = int(b_channel_multiplier)
 
+        if fire_pulse_id is not None:
+            if fire_pulse_id.lower() in ["null", "clear", "None", ""]:
+                new_fields["firePulseId"] = None
+            else:
+                new_fields["firePulseId"] = str(fire_pulse_id)
+
         if not new_fields:
             return '{"error": "没有提供任何需要修改的配置参数"}'
 
@@ -559,9 +573,10 @@ class MyPlugin(Star):
             - `message` (str): 成功或失败说明，例如 "成功向 1 个游戏发送了一键开火指令"。
             - `successClientIds` (array): 成功应用开火指令的客户端ID列表。
         """
-        if strength < 0:
+        if strength <= 0:
             return json.dumps(
-                {"status": 0, "error": "强度不能为负数"}, ensure_ascii=False
+                {"status": 0, "error": "开火强度必须是正整数（不能为0）"},
+                ensure_ascii=False,
             )
         if time is not None and time > 30000:
             return json.dumps(
@@ -741,8 +756,9 @@ class MyPlugin(Star):
     ):
         """用户直接控制郊狼设备的指令
         【查看】 /郊狼指令 查看 状态/波形列表/当前波形/强度
-        【修改】 /郊狼指令 修改 强度 <增/减/设为> <数值>
-        【修改】 /郊狼指令 修改 波形 <波形ID>
+        【修改】 /郊狼指令 修改 强度/随机强度 <增/减/设为> <数值>
+        【修改】 /郊狼指令 修改 波形/波形模式/波形时间/随机时间 <参数>
+        【修改】 /郊狼指令 修改 B通道开关/B通道倍数/开火限制/开火波形 <参数>
         【操作】 /郊狼指令 开火 <强度> [时间毫秒]
         """
         if not event.is_private_chat():
@@ -786,6 +802,10 @@ class MyPlugin(Star):
                 "⚡ /郊狼指令 修改 波形模式 <单|顺序|随机>\n"
                 "⚡ /郊狼指令 修改 波形时间 <秒数>\n"
                 "⚡ /郊狼指令 修改 随机时间 <最小秒> <最大秒>\n"
+                "⚡ /郊狼指令 修改 B通道开关 <开|关>\n"
+                "⚡ /郊狼指令 修改 B通道倍数 <数值>\n"
+                "⚡ /郊狼指令 修改 开火限制 <数值>\n"
+                "⚡ /郊狼指令 修改 开火波形 <波形ID|空>\n"
                 "🔥 /郊狼指令 开火 <强度> [时间毫秒]"
             )
             return
@@ -882,6 +902,12 @@ class MyPlugin(Star):
                     yield event.plain_result("别闹啦，强度数值必须是个有效整数哦！😠")
                     return
 
+                if val <= 0:
+                    yield event.plain_result(
+                        "别闹，强度必须是大于 0 的正整数哦！你这样设置还怎么好好惩罚人家呢？👿"
+                    )
+                    return
+
                 info = await self._request("GET", "")
                 if info.get("status") == 1:
                     client_strength = info.get("clientStrength") or {}
@@ -897,12 +923,16 @@ class MyPlugin(Star):
                         new_str -= val
                     elif mode in ["设为", "设置", "设定"]:
                         new_str = val
-                    if new_str < 0:
-                        new_str = 0
+
+                    if new_str <= 0:
+                        yield event.plain_result(
+                            "❌ 哎呀，你这样减来减去，最终的强度都要变成负数啦，这样一点感觉也没有的哦！"
+                        )
+                        return
 
                     if limit is not None and (new_str + curr_rnd) > limit:
                         yield event.plain_result(
-                            f"❌ 哎呀，强度设定得太高啦！这会超过 TA 的强度安全上限，被设备拦截了哦。请调低一点点再试吧～"
+                            "❌ 哎呀，强度设定得太高啦！这会超过 TA 的强度安全上限，被设备拦截了哦。请调低一点点再试吧～"
                         )
                         return
 
@@ -918,7 +948,7 @@ class MyPlugin(Star):
                     action_desc = f"设为了 {val}"
                 else:
                     yield event.plain_result(
-                        "参数填错啦，修改模式只能是 [增/减/设为] 哟！"
+                        "哎呀，参数填错啦，强度的修改模式只能是 [增/减/设为] 哟！"
                     )
                     return
 
@@ -942,6 +972,12 @@ class MyPlugin(Star):
                     )
                     return
 
+                if val <= 0:
+                    yield event.plain_result(
+                        "随机强度得大于 0 才能制造惊喜哦！连点波澜都没有，哪来的刺激感呢？👿"
+                    )
+                    return
+
                 info = await self._request("GET", "")
                 if info.get("status") == 1:
                     client_strength = info.get("clientStrength") or {}
@@ -957,12 +993,16 @@ class MyPlugin(Star):
                         new_rnd -= val
                     elif mode in ["设为", "设置", "设定"]:
                         new_rnd = val
-                    if new_rnd < 0:
-                        new_rnd = 0
+
+                    if new_rnd <= 0:
+                        yield event.plain_result(
+                            "❌ 哎呀，你这样减来减去，随机波动的幅度都变成负数啦... 这样就没惊喜了嘛！"
+                        )
+                        return
 
                     if limit is not None and (curr_str + new_rnd) > limit:
                         yield event.plain_result(
-                            f"❌ 哎呀，随机强度设定得太高啦！这会超过 TA 的强度安全上限，被设备拦截了哦。请调低一点点再试吧～"
+                            "❌ 哎呀，随机强度设定得太高啦！这会超过 TA 的强度安全上限，被设备拦截了哦。请调低一点点再试吧～"
                         )
                         return
 
@@ -978,7 +1018,7 @@ class MyPlugin(Star):
                     action_desc = f"设为了 {val}"
                 else:
                     yield event.plain_result(
-                        "参数填错啦，修改模式只能是 [增/减/设为] 哟！"
+                        "哎呀，参数填错啦，随机强度的修改模式只能是 [增/减/设为] 哟！"
                     )
                     return
 
@@ -994,7 +1034,9 @@ class MyPlugin(Star):
 
             elif target == "波形":
                 if not arg1:
-                    yield event.plain_result("要换成哪个波形呢？给出波形ID才行呀！")
+                    yield event.plain_result(
+                        "想要换成什么波形呢？不告诉我波形ID我可没法帮你配置哟！😈"
+                    )
                     return
                 pulse_ids = [p.strip() for p in arg1.split(",") if p.strip()]
                 payload = {"pulseId": pulse_ids if len(pulse_ids) > 1 else pulse_ids[0]}
@@ -1017,13 +1059,17 @@ class MyPlugin(Star):
                 }
                 mode = mode_map.get(arg1, arg1)
                 if mode not in ["single", "sequence", "random"]:
-                    yield event.plain_result("波形模式只能是：[单/顺序/随机] 哦！")
+                    yield event.plain_result(
+                        "哎呀，波形模式填错啦，只能是 [单/顺序/随机] 哦！"
+                    )
                     return
 
                 payload = {"pulseMode": mode}
                 res = await self._update_game_config_ws(payload)
                 if res.get("status") == 1:
-                    yield event.plain_result(f"✅ 已将波形播放顺序修改为：{arg1}！")
+                    yield event.plain_result(
+                        f"✅ 已将波形播放顺序修改为：{arg1}！\n(现在的电击节奏变成了 {arg1} 模式啦~)"
+                    )
                 else:
                     yield event.plain_result(
                         f"❌ 修改波形模式失败：{res.get('message', res.get('error', '未知错误'))}"
@@ -1033,13 +1079,21 @@ class MyPlugin(Star):
                 try:
                     val = int(arg1)
                 except ValueError:
-                    yield event.plain_result("波形切换时间必须是数字哦！")
+                    yield event.plain_result("波形切换时间必须得是个数字才行呀，笨笨！")
+                    return
+
+                if val <= 0:
+                    yield event.plain_result(
+                        "别闹，波形切换时间怎么能小于等于 0 呢！至少给设备一点反应的时间嘛~"
+                    )
                     return
 
                 payload = {"pulseChangeInterval": val}
                 res = await self._update_game_config_ws(payload)
                 if res.get("status") == 1:
-                    yield event.plain_result(f"✅ 已将波形切换时间修改为：{val}秒！")
+                    yield event.plain_result(
+                        f"✅ 已将波形切换时间修改为：{val}秒！\n(现在的波浪每 {val} 秒就会变一次呢~🌊)"
+                    )
                 else:
                     yield event.plain_result(
                         f"❌ 修改波形时间失败：{res.get('message', res.get('error', '未知错误'))}"
@@ -1050,24 +1104,127 @@ class MyPlugin(Star):
                     min_t = int(arg1)
                     max_t = int(arg2)
                 except ValueError:
+                    yield event.plain_result("随机时间必须是两个数字哦~")
+                    return
+
+                if min_t > max_t:
                     yield event.plain_result(
-                        "随机时间必须是两个数字哦，如：/郊狼指令 修改 随机时间 15 30"
+                        "哎呀，最小时间怎么能大于最大时间呢！笨笨的呢~"
                     )
                     return
+                if min_t < 10:
+                    min_t = 10
+                    max_t = max(10, max_t)
 
                 payload = {"strengthChangeInterval": [min_t, max_t]}
                 res = await self._update_game_config_ws(payload)
                 if res.get("status") == 1:
                     yield event.plain_result(
-                        f"✅ 已将随机强度变化间隔修改为：{min_t}-{max_t}秒！"
+                        f"✅ 已将随机强度变化间隔修改为：{min_t}-{max_t}秒！\n(现在的惊喜频率变成 {min_t} 到 {max_t} 秒之间啦~)"
                     )
                 else:
                     yield event.plain_result(
                         f"❌ 修改随机时间失败：{res.get('message', res.get('error', '未知错误'))}"
                     )
 
+            elif target in ["B通道开关", "通道开关"]:
+                mode = arg1
+                if mode in ["开", "开启", "打开", "true", "1"]:
+                    enable = True
+                elif mode in ["关", "关闭", "关闭", "false", "0"]:
+                    enable = False
+                else:
+                    yield event.plain_result("别闹啦，开关状态只能是 [开/关] 哦！")
+                    return
+
+                payload = {"enableBChannel": enable}
+                res = await self._update_game_config_ws(payload)
+                if res.get("status") == 1:
+                    state_str = "打开" if enable else "关闭"
+                    msg = f"✅ 已成功将 B通道 的状态设为：{state_str}！"
+                    if enable:
+                        msg += "\n双通道的快乐已经准备就绪了哟~😈"
+                    yield event.plain_result(msg)
+                else:
+                    yield event.plain_result(
+                        f"❌ 修改 B通道开关 失败：{res.get('message', res.get('error', '未知错误'))}"
+                    )
+
+            elif target in ["B通道倍数", "通道倍数", "倍数"]:
+                try:
+                    val = int(arg1)
+                except ValueError:
+                    yield event.plain_result("别闹啦，B通道倍数必须是个整数哦！😠")
+                    return
+
+                if val <= 0:
+                    yield event.plain_result(
+                        "B通道倍数必须是大于 0 的正整数哦，要不然怎么超级加倍呢？😈"
+                    )
+                    return
+
+                payload = {"bChannelStrengthMultiplier": val}
+                res = await self._update_game_config_ws(payload)
+                if res.get("status") == 1:
+                    yield event.plain_result(
+                        f"✅ 已将 B通道倍数 修改为：{val}倍！\n(要起飞啦！记得要在设置中开启了B通道哟~😈)"
+                    )
+                else:
+                    yield event.plain_result(
+                        f"❌ 修改 B通道倍数 失败：{res.get('message', res.get('error', '未知错误'))}"
+                    )
+
+            elif target in ["开火限制", "开火强度限制"]:
+                if str(event.get_sender_id()) != str(self.target_user_id):
+                    yield event.plain_result(
+                        "❌ 权限不足！开火强度限制是非常危险的设置，只有被控者本人才可以修改哦~"
+                    )
+                    return
+                try:
+                    val = int(arg1)
+                except ValueError:
+                    yield event.plain_result("别闹啦，开火强度限制必须是个整数哦！👿")
+                    return
+                if val <= 0:
+                    yield event.plain_result(
+                        "限制必须是大于 0 的正整数哦，设成 0 或负数算什么惩罚上限呢？怎么，想逃避惩罚吗？😈"
+                    )
+                    return
+                payload = {"fireStrengthLimit": val}
+                res = await self._update_game_config_ws(payload)
+                if res.get("status") == 1:
+                    yield event.plain_result(
+                        f"✅ 已将一键开火的强度限制修改为：{val}！\n再惹我生气，惩罚可是很疼的哦~🔥"
+                    )
+                else:
+                    yield event.plain_result(
+                        f"❌ 修改开火强度限制失败：{res.get('message', res.get('error', '未知错误'))}"
+                    )
+
+            elif target == "开火波形":
+                pulse_id = arg1.strip()
+                if pulse_id.lower() in ["空", "无", "清空", "null", "clear"]:
+                    payload = {"firePulseId": None}
+                    pulse_name_str = "空"
+                else:
+                    payload = {"firePulseId": pulse_id}
+                    pulse_name_str = pulse_id
+
+                res = await self._update_game_config_ws(payload)
+                if res.get("status") == 1:
+                    msg = f"✅ 已将开火专属波形修改为：{pulse_name_str}！\n"
+                    if payload["firePulseId"] is None:
+                        msg += "开火波形清空啦，接下来开火就用当前波形了哦~"
+                    else:
+                        msg += "下次开火，你就能体验到这个绝妙的专属波形啦~⚡"
+                    yield event.plain_result(msg)
+                else:
+                    yield event.plain_result(
+                        f"❌ 修改开火波形失败：{res.get('message', res.get('error', '未知错误'))}"
+                    )
+
             else:
-                yield event.plain_result("咦，您的操作我不认识呢！")
+                yield event.plain_result("咦，您的修改目标我不认识呢！")
 
         elif action == "开火":
             if not has_perm:
@@ -1079,11 +1236,13 @@ class MyPlugin(Star):
                 strength = int(target)
                 time_ms = int(arg1) if arg1 else 5000
             except ValueError:
-                yield event.plain_result("填写的强度或时间不对哦，必须是数字才行！👿")
+                yield event.plain_result(
+                    "咦，填写的惩罚强度或时间不对哦，必须得是明确的数字才行！👿"
+                )
                 return
 
-            if strength < 0:
-                yield event.plain_result("别闹啦，强度不能为负数喵！")
+            if strength <= 0:
+                yield event.plain_result("别闹，开火强度必须得大于 0 哟！这么心软嘛~🔥")
                 return
             if time_ms > 30000:
                 yield event.plain_result(
@@ -1103,13 +1262,13 @@ class MyPlugin(Star):
 
                 if fire_limit is not None and strength > fire_limit:
                     yield event.plain_result(
-                        f"❌ 哎呀，开火强度太高啦！这超过了 TA 自己设定的一键开火限制哦，调低一点点再试吧～"
+                        "❌ 哎呀，开火强度太高啦！这超过了 TA 自己设定的一键开火限制哦，调低一点点再试吧～"
                     )
                     return
 
                 if limit is not None and (curr_str + curr_rnd + strength) > limit:
                     yield event.plain_result(
-                        f"❌ 开火操作被拦截了喵！这个强度再加上原本的强度波动会超过 TA 的绝对安全上限的，太狠了会坏掉的～"
+                        "❌ 开火操作被拦截了喵！这个强度再加上原本的强度波动会超过 TA 的绝对安全上限的，太狠了会坏掉的～"
                     )
                     return
 
