@@ -1013,18 +1013,12 @@ class MyPlugin(Star):
                     f"❌ 开火操作失败...\n错误原因：{res.get('message', res.get('error', '未知'))}"
                 )
 
-    def terminate(self):
+    async def terminate(self):
         """插件被卸载/停用时调用，用于清理资源。"""
-        import asyncio
-
         session = getattr(self, "session", None)
         if session is not None and not getattr(session, "closed", True):
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(session.close())
-                else:
-                    loop.run_until_complete(session.close())
+                await session.close()
             except Exception as e:
                 logger.error(f"Error closing HTTP session: {e}")
             logger.info(f"{self.__class__.__name__}: HTTP session closed.")
