@@ -5,7 +5,10 @@
 
 这是一款为 [AstrBot](https://github.com/SkywalkerJi/AstrBot) 量身定制的“小玩具”插件！
 
-它能让你通过聊天控制 [DG-Lab Coyote Game Hub](https://github.com/hyperzlib/DG-Lab-Coyote-Game-Hub) 这个神奇的玩意儿，实现远程强度控制、波形切换、以及一键开火！✨
+它能让你通过聊天控制 [DG-Lab Coyote Game Hub](https://github.com/hyperzlib/DG-Lab-Coyote-Game-Hub) 这个神奇的玩意儿，实现远程强度控制、波形切换、以及一键开火！（你懂的 😉）✨
+
+
+这是酪灰基于原作者 [RC-CHN](https://github.com/RC-CHN/astrbot_dg_lab_plugin) 的修改增强版。
 
 ---
 
