@@ -752,7 +752,12 @@ class MyPlugin(Star):
                 yield event.plain_result("唔...查看的目标我不认识呢！")
 
         elif action == "修改":
-            if target == "强度":
+            if not has_perm:
+                yield event.plain_result(
+                    "❌ 权限不足！只有受控者本人、管理员或被授权用户才能使用这些指令哦~"
+                )
+                return
+            elif target == "强度":
                 mode = arg1
                 try:
                     val = int(arg2)
@@ -900,6 +905,11 @@ class MyPlugin(Star):
                 yield event.plain_result("咦，您的操作我不认识呢！")
 
         elif action == "开火":
+            if not has_perm:
+                yield event.plain_result(
+                    "❌ 权限不足！只有受控者本人、管理员或被授权用户才能使用这些指令哦~"
+                )
+                return
             try:
                 strength = int(target)
                 time_ms = int(arg1) if arg1 else 5000
