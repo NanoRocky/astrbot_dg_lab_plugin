@@ -1,5 +1,5 @@
 name: astrbot_dg_lab_plugin 
 desc: 小爱同学，电我。 # 插件简短描述
 version: v3.1 
-author: RC-CHN # 作者
-repo: https://github.com/RC-CHN/astrbot_dg_lab_plugin # 插件的仓库地址
+author: RC-CHN & NanoRocky # 作者
+repo: https://github.com/NanoRocky/astrbot_dg_lab_plugin/tree/main # 插件的仓库地址
