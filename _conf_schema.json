@@ -25,9 +25,46 @@
         "type": "object",
         "items": {
             "user_id": {
-                "description": "受控者的标识（如QQ号、昵称），让 AI 明确郊狼设备佩戴在谁身上",
+                "description": "受控者的标识（如QQ号），让 AI 明确郊狼设备佩戴在谁身上",
                 "type": "string",
-                "default": "未知"
+                "default": "未设置"
+            },
+            "user_name": {
+                "description": "受控者的昵称，让 AI 明确郊狼设备佩戴在谁身上",
+                "type": "string",
+                "default": "未设置"
+            }
+        }
+    },
+    "authorized_settings": {
+        "description": "用户权限设置",
+        "type": "object",
+        "items": {
+            "allow_all_users": {
+                "description": "是否允许所有用户使用郊狼控制指令",
+                "type": "bool",
+                "default": false
+            },
+            "authorized_users": {
+                "description": "已授权可以使用郊狼控制指令的用户ID列表",
+                "type": "list",
+                "default": []
+            }
+        }
+    },
+    "group_settings": {
+        "description": "群聊权限设置",
+        "type": "object",
+        "items": {
+            "allow_group_chat": {
+                "description": "是否允许在群聊中调用指令",
+                "type": "bool",
+                "default": false
+            },
+            "allowed_groups": {
+                "description": "允许调用指令的群组列表（留空则所有群组均可调用）",
+                "type": "list",
+                "default": []
             }
         }
     }
