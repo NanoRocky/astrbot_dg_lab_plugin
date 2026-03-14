@@ -11,7 +11,7 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.message.components import At
 
 
-@register("astrbot_dg_lab_ultra_plugin", "RC-CHN & NanoRocky", "郊狼API控制插件", "3.1")
+@register("astrbot_dg_lab_ultra_plugin", "RC-CHN & NanoRocky", "郊狼API控制插件", "3.1.0")
 class MyPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
