@@ -404,9 +404,9 @@ class MyPlugin(Star):
                 new_str -= strength_sub
             elif strength_set is not None:
                 new_str = strength_set
-            if new_str <= 0:
+            if new_str < 0:
                 return json.dumps(
-                    {"status": 0, "error": "哎呀，基础强度不可以小于等于 0 啦～"},
+                    {"status": 0, "error": "哎呀，基础强度不可以变负数啦～"},
                     ensure_ascii=False,
                 )
 
@@ -417,9 +417,12 @@ class MyPlugin(Star):
                 new_rnd -= random_strength_sub
             elif random_strength_set is not None:
                 new_rnd = random_strength_set
-            if new_rnd <= 0:
+            if new_rnd < 0:
                 return json.dumps(
-                    {"status": 0, "error": "哼，随机强度的波动怎么能小于等于 0 呢～"},
+                    {
+                        "status": 0,
+                        "error": "哼，随机强度的波动怎么能是负数呢～是往回倒吸快感吗？",
+                    },
                     ensure_ascii=False,
                 )
 
@@ -504,8 +507,10 @@ class MyPlugin(Star):
             strength_change_interval_min is not None
             and strength_change_interval_max is not None
         ):
-            if strength_change_interval_min < 10:
-                strength_change_interval_min = 10
+            if strength_change_interval_min < 0:
+                return '{"error": "最小间隔不能小于 0"}'
+            if strength_change_interval_max <= 0:
+                return '{"error": "最大间隔必须大于 0"}'
             if strength_change_interval_min > strength_change_interval_max:
                 return '{"error": "最大间隔不能小于最小间隔"}'
             new_fields["strengthChangeInterval"] = [
@@ -535,6 +540,16 @@ class MyPlugin(Star):
                 return '{"error": "b_channel_multiplier 必须是整数"}'
             if b_channel_multiplier < 1:
                 return '{"error": "b_channel_multiplier 必须大于或等于1"}'
+
+            if enable_b_channel is False:
+                return '{"error": "无法在关闭B通道的同时设置B通道倍数"}'
+            elif enable_b_channel is None:
+                state_res = await self._request("GET", "")
+                if state_res.get("status") == 1:
+                    game_config = state_res.get("gameConfig", {})
+                    if not game_config.get("enableBChannel", False):
+                        return '{"error": "B通道当前未开启，必须先确认用户已连接B通道电极，再开启B通道 (enable_b_channel=true) 才能设置B通道倍数"}'
+
             new_fields["bChannelStrengthMultiplier"] = int(b_channel_multiplier)
 
         if fire_pulse_id is not None:
@@ -902,9 +917,9 @@ class MyPlugin(Star):
                     yield event.plain_result("别闹啦，强度数值必须是个有效整数哦！😠")
                     return
 
-                if val <= 0:
+                if val < 0:
                     yield event.plain_result(
-                        "别闹，强度必须是大于 0 的正整数哦！你这样设置还怎么好好惩罚人家呢？👿"
+                        "别闹，强度不能是负数哦！你这已经是想用爱发电了吧？👿"
                     )
                     return
 
@@ -924,7 +939,7 @@ class MyPlugin(Star):
                     elif mode in ["设为", "设置", "设定"]:
                         new_str = val
 
-                    if new_str <= 0:
+                    if new_str < 0:
                         yield event.plain_result(
                             "❌ 哎呀，你这样减来减去，最终的强度都要变成负数啦，这样一点感觉也没有的哦！"
                         )
@@ -972,9 +987,9 @@ class MyPlugin(Star):
                     )
                     return
 
-                if val <= 0:
+                if val < 0:
                     yield event.plain_result(
-                        "随机强度得大于 0 才能制造惊喜哦！连点波澜都没有，哪来的刺激感呢？👿"
+                        "随机强度不能是负数哦！哪有把波动减掉变成负数的道理呢~👿"
                     )
                     return
 
@@ -994,7 +1009,7 @@ class MyPlugin(Star):
                     elif mode in ["设为", "设置", "设定"]:
                         new_rnd = val
 
-                    if new_rnd <= 0:
+                    if new_rnd < 0:
                         yield event.plain_result(
                             "❌ 哎呀，你这样减来减去，随机波动的幅度都变成负数啦... 这样就没惊喜了嘛！"
                         )
@@ -1107,14 +1122,21 @@ class MyPlugin(Star):
                     yield event.plain_result("随机时间必须是两个数字哦~")
                     return
 
+                if min_t < 0:
+                    yield event.plain_result(
+                        "哎呀，最小时间怎么能是负数呢！你在试图让时间倒流吗？"
+                    )
+                    return
+                if max_t <= 0:
+                    yield event.plain_result(
+                        "最大时间必须大于 0 哟！不可能一瞬间波澜都没有吧？"
+                    )
+                    return
                 if min_t > max_t:
                     yield event.plain_result(
                         "哎呀，最小时间怎么能大于最大时间呢！笨笨的呢~"
                     )
                     return
-                if min_t < 10:
-                    min_t = 10
-                    max_t = max(10, max_t)
 
                 payload = {"strengthChangeInterval": [min_t, max_t]}
                 res = await self._update_game_config_ws(payload)
@@ -1163,11 +1185,20 @@ class MyPlugin(Star):
                     )
                     return
 
+                info = await self._request("GET", "")
+                if info.get("status") == 1:
+                    game_config = info.get("gameConfig") or {}
+                    if not game_config.get("enableBChannel", False):
+                        yield event.plain_result(
+                            "哎呀，B通道还没开启呢！请先开启它，再来设置倍数享受双倍快感吧~😈"
+                        )
+                        return
+
                 payload = {"bChannelStrengthMultiplier": val}
                 res = await self._update_game_config_ws(payload)
                 if res.get("status") == 1:
                     yield event.plain_result(
-                        f"✅ 已将 B通道倍数 修改为：{val}倍！\n(要起飞啦！记得要在设置中开启了B通道哟~😈)"
+                        f"✅ 已将 B通道倍数 修改为：{val}倍！\n(双通道起飞啦~😈)"
                     )
                 else:
                     yield event.plain_result(
