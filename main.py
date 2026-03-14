@@ -278,8 +278,8 @@ class MyPlugin(Star):
             - `status` (int): 请求状态码，1 表示成功，0 表示失败。
             - `code` (str): 状态码信息，如 "OK"。
             - `strengthConfig` (object): 强度设置信息：
-                - `strength` (number): 基础强度。
-                - `randomStrength` (number): 随机波动强度，实际强度范围：[strength, strength + randomStrength]。
+                - `strength` (number): 基础强度，只能为正整数。
+                - `randomStrength` (number): 随机波动强度，只能为正整数，实际强度范围：[strength, strength + randomStrength]。例如，如果 strength=5，randomStrength=15，则实际强度会在 5 到 20 之间波动。
             - `gameConfig` (object): 游戏配置信息：
                 - `strengthChangeInterval` (array): 随机强度变化间隔的时间范围，如 [15, 30]，单位：秒。
                 - `enableBChannel` (boolean): 是否启用了 B 通道。
