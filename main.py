@@ -279,7 +279,7 @@ class MyPlugin(Star):
             - `code` (str): 状态码信息，如 "OK"。
             - `strengthConfig` (object): 强度设置信息：
                 - `strength` (number): 基础强度，只能为正整数。
-                - `randomStrength` (number): 随机波动强度，只能为正整数，实际强度范围：[strength, strength + randomStrength]。例如，如果 strength=5，randomStrength=15，则实际强度会在 5 到 20 之间波动。
+                - `randomStrength` (number): 随机波动强度，只能为正整数，实际强度范围：[strength, strength + randomStrength]。随机数会从 0 到 randomStrength 之间随机生成，然后与基础强度相加。例如，如果 strength=5，randomStrength=15，则实际强度会在 5 到 20 之间波动。
             - `gameConfig` (object): 游戏配置信息：
                 - `strengthChangeInterval` (array): 随机强度变化间隔的时间范围，如 [15, 30]，单位：秒。
                 - `enableBChannel` (boolean): 是否启用了 B 通道。
@@ -321,7 +321,7 @@ class MyPlugin(Star):
             - `code` (str): 状态码信息，如 "OK"。
             - `strengthConfig` (object): 强度设置信息：
                 - `strength` (number): 当前设置的基础强度数值。
-                - `randomStrength` (number): 当前设置的随机波动强度。实际运行时强度将在 [strength, strength + randomStrength] 之间动态波动。
+                - `randomStrength` (number): 当前设置的随机波动强度。实际运行时强度将在 [strength, strength + randomStrength] 之间动态波动。随机数会从 0 到 randomStrength 之间随机生成，然后与基础强度相加。例如，如果 strength=5，randomStrength=15，则实际强度会在 5 到 20 之间波动。
         """
         res = await self._request("GET", "/strength")
 
@@ -344,9 +344,9 @@ class MyPlugin(Star):
             strength_add (number): 可选，增加的基础强度值。
             strength_sub (number): 可选，减少的基础强度值。
             strength_set (number): 可选，直接设置的基础强度值。请避免超过客户端配置的最大限制。
-            random_strength_add (number): 可选，增加的随机强度值。
-            random_strength_sub (number): 可选，减少的随机强度值。
-            random_strength_set (number): 可选，直接设置的随机强度值。
+            random_strength_add (number): 可选，增加的随机强度值。随机数会从 0 到 randomStrength 之间随机生成，然后与基础强度相加。例如，如果 strength=5，randomStrength=15，则实际强度会在 5 到 20 之间波动。
+            random_strength_sub (number): 可选，减少的随机强度值。随机数会从 0 到 randomStrength 之间随机生成，然后与基础强度相加。例如，如果 strength=5，randomStrength=15，则实际强度会在 5 到 20 之间波动。
+            random_strength_set (number): 可选，直接设置的随机强度值。随机数会从 0 到 randomStrength 之间随机生成，然后与基础强度相加。例如，如果 strength=5，randomStrength=15，则实际强度会在 5 到 20 之间波动。
 
         Returns:
             JSON 字符串。包含以下完整字段：

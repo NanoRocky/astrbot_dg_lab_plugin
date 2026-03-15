@@ -76,6 +76,11 @@
     在人格设定或其它方式，引导 Bot 调用 `dglab_get_target_info` 函数。
     例如 `你可以在 AstrBot 上使用 dglab_get_target_info 等函数来控制 ** 的郊狼。` ，这里写的不怎么好，自行设定喔！
 
+> [!IMPORTANT]
+> ## ⚠ Warning
+>**请一定在人格设定中或其它方式，告诉 LLM 遇到非本人与 Bot 说话要求控制郊狼时应如何处理，否则可能出现越权！**
+
+
 ---
 
 ## 💡 使用建议
